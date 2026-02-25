@@ -6,8 +6,6 @@ const db = require('../db/database');
 const { t } = require('../i18n/translations');
 const { safeSend } = require('../bot/bot');
 
-const WEBAPP_URL = process.env.WEBAPP_URL;
-
 /**
  * Build a deadline ISO string for a group.
  * Deadline = now + group.order_deadline_hours.
@@ -47,7 +45,7 @@ async function sendGroupReminder(group) {
     const lang = client.language || 'es';
     const text = t(lang, 'reminder_text', { deadline: deadlineFormatted });
     const keyboard = Markup.inlineKeyboard([
-      [Markup.button.webApp(t(lang, 'reminder_btn'), `${WEBAPP_URL}/`)],
+      [Markup.button.callback(t(lang, 'reminder_btn'), 'start_order')],
     ]);
     await safeSend(client.telegram_id, text, keyboard);
     db.logNotification({ user_id: client.id, type: 'reminder' });

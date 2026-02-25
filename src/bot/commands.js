@@ -6,22 +6,17 @@ const { t } = require('../i18n/translations');
 const { safeSend } = require('./bot');
 
 const MANAGER_CHAT_ID = process.env.MANAGER_CHAT_ID;
-const WEBAPP_URL = process.env.WEBAPP_URL;
 const ADMIN_USERNAME = process.env.ADMIN_USERNAME || 'msconsult';
 
-/**
- * Build the inline keyboard with the WebApp button for approved clients.
- */
 function buildOrderKeyboard(lang) {
   return Markup.inlineKeyboard([
-    [Markup.button.webApp(t(lang, 'open_order_btn'), `${WEBAPP_URL}/`)],
+    [Markup.button.callback(t(lang, 'open_order_btn'), 'start_order')],
   ]);
 }
 
 function buildAdminKeyboard(lang) {
   return Markup.inlineKeyboard([
-    [Markup.button.webApp(t(lang, 'open_order_btn'), `${WEBAPP_URL}/`)],
-    [Markup.button.webApp(t(lang, 'open_admin_btn'), `${WEBAPP_URL}/`)],
+    [Markup.button.callback(t(lang, 'open_order_btn'), 'start_order')],
   ]);
 }
 

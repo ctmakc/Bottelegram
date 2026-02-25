@@ -1,9 +1,5 @@
 'use strict';
 
-/**
- * Registers all bot commands and callback handlers on the Telegraf instance.
- */
-
 const {
   handleStart,
   handleLanguageSelection,
@@ -11,27 +7,66 @@ const {
   handleReject,
 } = require('./commands');
 
+const {
+  handleStartOrder,
+  handleOrderButton,
+  handleOrderConfirm,
+  handleOrderReset,
+  handleEditOrder,
+  handleCancelOrder,
+} = require('./order');
+
+const {
+  handleAdminOrders,
+  handleAdminClients,
+  handleAdminProducts,
+  handleAdminGroups,
+  handleManagerConfirmOrder,
+  handleProductToggle,
+  handleSendGroupReminder,
+} = require('./admin');
+
 function setupBot(bot) {
   // ── /start ─────────────────────────────────────────────────────────────────
   bot.start(handleStart);
 
-  // ── Language selection callbacks ───────────────────────────────────────────
+  // ── /order — open order form (clients) ────────────────────────────────────
+  bot.command('order', handleStartOrder);
+
+  // ── Admin commands ─────────────────────────────────────────────────────────
+  bot.command('orders', handleAdminOrders);
+  bot.command('clients', handleAdminClients);
+  bot.command('products', handleAdminProducts);
+  bot.command('groups', handleAdminGroups);
+
+  // ── Language selection ─────────────────────────────────────────────────────
   bot.action(/^lang_(es|ru)_(\d+)$/, async (ctx) => {
-    const lang = ctx.match[1];
-    const telegramId = Number(ctx.match[2]);
-    await handleLanguageSelection(ctx, lang, telegramId);
+    await handleLanguageSelection(ctx, ctx.match[1], Number(ctx.match[2]));
   });
 
-  // ── Manager approval callbacks ─────────────────────────────────────────────
+  // ── Client approval ────────────────────────────────────────────────────────
   bot.action(/^approve_(\d+)$/, async (ctx) => {
-    const telegramId = Number(ctx.match[1]);
-    await handleApprove(ctx, telegramId);
+    await handleApprove(ctx, Number(ctx.match[1]));
+  });
+  bot.action(/^reject_(\d+)$/, async (ctx) => {
+    await handleReject(ctx, Number(ctx.match[1]));
   });
 
-  bot.action(/^reject_(\d+)$/, async (ctx) => {
-    const telegramId = Number(ctx.match[1]);
-    await handleReject(ctx, telegramId);
-  });
+  // ── Order flow ─────────────────────────────────────────────────────────────
+  bot.action('start_order', handleStartOrder);
+  bot.action(/^op[+\-]\d+$/, handleOrderButton);
+  bot.action('oc', handleOrderConfirm);
+  bot.action('ox', handleOrderReset);
+  bot.action('edit_order', handleEditOrder);
+  bot.action('cancel_order', handleCancelOrder);
+
+  // ── Manager / admin callbacks ──────────────────────────────────────────────
+  bot.action(/^mgr_confirm_(\d+)$/, handleManagerConfirmOrder);
+  bot.action(/^toggle_product_(\d+)$/, handleProductToggle);
+  bot.action(/^send_reminder_(\d+)$/, handleSendGroupReminder);
+
+  // ── noop (display-only buttons in the order form) ─────────────────────────
+  bot.action('noop', (ctx) => ctx.answerCbQuery());
 
   // ── Error handler ──────────────────────────────────────────────────────────
   bot.catch((err, ctx) => {
