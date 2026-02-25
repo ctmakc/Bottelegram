@@ -5,7 +5,7 @@ const db = require('../../db/database');
 const { requireApproved } = require('../middleware/auth');
 const { t } = require('../../i18n/translations');
 const { safeSend } = require('../../bot/bot');
-const { buildDeadline, formatDeadline } = require('../../scheduler/scheduler');
+const { buildDeadline } = require('../../scheduler/scheduler');
 
 const MANAGER_CHAT_ID = process.env.MANAGER_CHAT_ID;
 
@@ -50,14 +50,21 @@ router.post('/', requireApproved, async (req, res) => {
 
   const period = db.getTodayPeriod();
 
-  // Get the user's group to determine deadline
+  // Deadlines depend on group settings
   let deadlineIso = null;
+  let cancelDeadlineIso = null;
   if (user.group_id) {
     const group = db.getGroupById(user.group_id);
-    if (group) deadlineIso = buildDeadline(group.order_deadline_hours);
+    if (group) {
+      deadlineIso = buildDeadline(group.order_deadline_hours);
+      cancelDeadlineIso = buildDeadline(group.cancel_deadline_hours || 1);
+    }
+  } else {
+    // No group: default cancel window = 1 hour
+    cancelDeadlineIso = buildDeadline(1);
   }
 
-  const { order, isNew } = db.createOrUpdateOrder(user.id, period, items, deadlineIso);
+  const { order, isNew } = db.createOrUpdateOrder(user.id, period, items, deadlineIso, cancelDeadlineIso);
 
   // Load full order with items for notification
   const fullOrder = db.getOrderWithItems(order.id);
@@ -88,6 +95,39 @@ router.post('/', requireApproved, async (req, res) => {
     order: fullOrder,
     message: isNew ? 'created' : 'updated',
   });
+});
+
+// POST /api/orders/cancel — cancel a submitted order within the cancel window
+router.post('/cancel', requireApproved, async (req, res) => {
+  const user = req.dbUser;
+  const period = db.getTodayPeriod();
+  const order = db.getOrderForUser(user.id, period);
+
+  if (!order) return res.status(404).json({ error: 'No order found' });
+  if (order.status === 'cancelled') return res.status(400).json({ error: 'Already cancelled' });
+  if (order.status === 'confirmed') return res.status(400).json({ error: 'Order already confirmed by manager' });
+
+  // Enforce cancellation window
+  if (order.cancel_deadline && new Date(order.cancel_deadline) < new Date()) {
+    return res.status(400).json({ error: 'Cancellation window has expired' });
+  }
+
+  db.cancelOrder(order.id);
+
+  // Notify manager
+  if (MANAGER_CHAT_ID) {
+    const dateStr = new Date().toLocaleString('es-ES', { timeZone: 'Europe/Madrid' });
+    const group = user.group_id ? db.getGroupById(user.group_id) : null;
+    const text = t('es', 'order_cancelled_manager', {
+      client: user.full_name || user.username || String(user.telegram_id),
+      group: group?.name || '—',
+      date: dateStr,
+    });
+    await safeSend(MANAGER_CHAT_ID, text, { parse_mode: 'Markdown' });
+  }
+
+  db.logNotification({ user_id: user.id, order_id: order.id, type: 'order_cancel' });
+  res.json({ ok: true });
 });
 
 module.exports = router;

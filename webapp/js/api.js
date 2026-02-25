@@ -44,6 +44,7 @@
     // ── Orders ────────────────────────────────────────────────────────────────
     getCurrentOrder: () => request('GET', '/orders/current'),
     submitOrder: (items) => request('POST', '/orders', { items }),
+    cancelOrder: () => request('POST', '/orders/cancel'),
 
     // ── Admin ─────────────────────────────────────────────────────────────────
     getAdminOrders: (period) => request('GET', `/admin/orders${period ? '?period=' + period : ''}`),

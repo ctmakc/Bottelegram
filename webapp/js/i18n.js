@@ -31,9 +31,17 @@
 
       order_status_submitted: 'Enviado ✅',
       order_status_confirmed: 'Confirmado por el equipo ✅',
+      order_status_cancelled: 'Cancelado ❌',
       order_status_draft: 'Borrador',
 
+      btn_cancel_order: '❌ Cancelar pedido',
+      cancel_confirm: '¿Seguro que quieres cancelar tu pedido?',
+      order_cancelled_msg: 'Pedido cancelado.',
+      cancel_deadline_label: '⏱ Cancelación posible hasta:',
+      cancel_expired: 'El plazo de cancelación ha pasado.',
+
       // Admin
+      filter_cancelled: 'Cancelados',
       admin_panel: 'Panel de Administración',
       tab_orders: 'Pedidos',
       tab_clients: 'Clientes',
@@ -110,7 +118,16 @@
 
       order_status_submitted: 'Отправлен ✅',
       order_status_confirmed: 'Подтверждён командой ✅',
+      order_status_cancelled: 'Отменён ❌',
       order_status_draft: 'Черновик',
+
+      btn_cancel_order: '❌ Отменить заказ',
+      cancel_confirm: 'Вы уверены, что хотите отменить заказ?',
+      order_cancelled_msg: 'Заказ отменён.',
+      cancel_deadline_label: '⏱ Отмена возможна до:',
+      cancel_expired: 'Время отмены истекло.',
+
+      filter_cancelled: 'Отменённые',
 
       // Admin
       admin_panel: 'Панель администратора',

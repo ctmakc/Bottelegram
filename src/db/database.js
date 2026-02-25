@@ -27,13 +27,14 @@ function initDb(dbPath) {
 function createSchema() {
   db.exec(`
     CREATE TABLE IF NOT EXISTS groups (
-      id                   INTEGER PRIMARY KEY AUTOINCREMENT,
-      name                 TEXT    NOT NULL,
-      location             TEXT,
-      reminder_time        TEXT    DEFAULT '09:00',
-      reminder_days        TEXT    DEFAULT '[1,2,3,4,5]',
-      order_deadline_hours INTEGER DEFAULT 24,
-      created_at           DATETIME DEFAULT CURRENT_TIMESTAMP
+      id                    INTEGER PRIMARY KEY AUTOINCREMENT,
+      name                  TEXT    NOT NULL,
+      location              TEXT,
+      reminder_time         TEXT    DEFAULT '09:00',
+      reminder_days         TEXT    DEFAULT '[1,2,3,4,5]',
+      order_deadline_hours  INTEGER DEFAULT 24,
+      cancel_deadline_hours INTEGER DEFAULT 1,
+      created_at            DATETIME DEFAULT CURRENT_TIMESTAMP
     );
 
     CREATE TABLE IF NOT EXISTS users (
@@ -61,14 +62,15 @@ function createSchema() {
     );
 
     CREATE TABLE IF NOT EXISTS orders (
-      id         INTEGER PRIMARY KEY AUTOINCREMENT,
-      user_id    INTEGER NOT NULL REFERENCES users(id),
-      status     TEXT    DEFAULT 'draft',
-      deadline   DATETIME,
-      period     TEXT    NOT NULL,
-      notes      TEXT,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      id              INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id         INTEGER NOT NULL REFERENCES users(id),
+      status          TEXT    DEFAULT 'draft',
+      deadline        DATETIME,
+      cancel_deadline DATETIME,
+      period          TEXT    NOT NULL,
+      notes           TEXT,
+      created_at      DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at      DATETIME DEFAULT CURRENT_TIMESTAMP
     );
 
     CREATE TABLE IF NOT EXISTS order_items (
@@ -211,15 +213,15 @@ function getGroupById(id) {
   return getDb().prepare('SELECT * FROM groups WHERE id = ?').get(id);
 }
 
-function createGroup({ name, location, reminder_time = '09:00', reminder_days = '[1,2,3,4,5]', order_deadline_hours = 24 }) {
+function createGroup({ name, location, reminder_time = '09:00', reminder_days = '[1,2,3,4,5]', order_deadline_hours = 24, cancel_deadline_hours = 1 }) {
   const result = getDb().prepare(
-    'INSERT INTO groups (name, location, reminder_time, reminder_days, order_deadline_hours) VALUES (?, ?, ?, ?, ?)'
-  ).run(name, location || null, reminder_time, reminder_days, order_deadline_hours);
+    'INSERT INTO groups (name, location, reminder_time, reminder_days, order_deadline_hours, cancel_deadline_hours) VALUES (?, ?, ?, ?, ?, ?)'
+  ).run(name, location || null, reminder_time, reminder_days, order_deadline_hours, cancel_deadline_hours);
   return getDb().prepare('SELECT * FROM groups WHERE id = ?').get(result.lastInsertRowid);
 }
 
 function updateGroup(id, fields) {
-  const allowed = ['name', 'location', 'reminder_time', 'reminder_days', 'order_deadline_hours'];
+  const allowed = ['name', 'location', 'reminder_time', 'reminder_days', 'order_deadline_hours', 'cancel_deadline_hours'];
   const sets = Object.keys(fields).filter(k => allowed.includes(k)).map(k => `${k} = ?`).join(', ');
   const vals = Object.keys(fields).filter(k => allowed.includes(k)).map(k => fields[k]);
   if (!sets) return;
@@ -259,13 +261,16 @@ function getOrdersForPeriod(period) {
   `).all(period);
 }
 
-function createOrUpdateOrder(userId, period, items, deadlineIso) {
+function createOrUpdateOrder(userId, period, items, deadlineIso, cancelDeadlineIso) {
   const existing = getOrderForUser(userId, period);
 
   if (existing) {
-    // Update
-    getDb().prepare("UPDATE orders SET status = 'submitted', deadline = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?")
-      .run(deadlineIso || null, existing.id);
+    // Update — reset cancel_deadline from the moment of re-submission
+    getDb().prepare(`
+      UPDATE orders
+      SET status = 'submitted', deadline = ?, cancel_deadline = ?, updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `).run(deadlineIso || null, cancelDeadlineIso || null, existing.id);
     getDb().prepare('DELETE FROM order_items WHERE order_id = ?').run(existing.id);
     const insertItem = getDb().prepare('INSERT INTO order_items (order_id, product_id, quantity) VALUES (?, ?, ?)');
     items.forEach(({ product_id, quantity }) => {
@@ -275,8 +280,8 @@ function createOrUpdateOrder(userId, period, items, deadlineIso) {
   } else {
     // Create
     const result = getDb().prepare(
-      "INSERT INTO orders (user_id, status, deadline, period) VALUES (?, 'submitted', ?, ?)"
-    ).run(userId, deadlineIso || null, period);
+      "INSERT INTO orders (user_id, status, deadline, cancel_deadline, period) VALUES (?, 'submitted', ?, ?, ?)"
+    ).run(userId, deadlineIso || null, cancelDeadlineIso || null, period);
     const orderId = result.lastInsertRowid;
     const insertItem = getDb().prepare('INSERT INTO order_items (order_id, product_id, quantity) VALUES (?, ?, ?)');
     items.forEach(({ product_id, quantity }) => {
@@ -284,6 +289,10 @@ function createOrUpdateOrder(userId, period, items, deadlineIso) {
     });
     return { order: getDb().prepare('SELECT * FROM orders WHERE id = ?').get(orderId), isNew: true };
   }
+}
+
+function cancelOrder(orderId) {
+  getDb().prepare("UPDATE orders SET status = 'cancelled', updated_at = CURRENT_TIMESTAMP WHERE id = ?").run(orderId);
 }
 
 function confirmOrder(orderId) {
@@ -325,5 +334,6 @@ module.exports = {
   getOrdersForPeriod,
   createOrUpdateOrder,
   confirmOrder,
+  cancelOrder,
   logNotification,
 };

@@ -24,6 +24,7 @@ const translations = {
 
     order_received_manager: '📦 *Nuevo pedido recibido*\n\nCliente: *{client}*\nGrupo: {group}\nFecha: {date}\n\n{items}\n\n*Total: {total} ud*',
     order_updated_manager: '✏️ *Pedido actualizado*\n\nCliente: *{client}*\nGrupo: {group}\nFecha: {date}\n\n{items}\n\n*Total: {total} ud*',
+    order_cancelled_manager: '❌ *Pedido cancelado*\n\nCliente: *{client}*\nGrupo: {group}\nFecha: {date}',
 
     reminder_text: '⏰ *Recordatorio de pedido Mini Melts* 🍦\n\nEs hora de realizar tu pedido.\nPlazo de envío: *{deadline}*\n\nHaz clic en el botón para abrir el panel:',
     reminder_btn: '📋 Hacer pedido',
@@ -128,6 +129,7 @@ const translations = {
 
     order_received_manager: '📦 *Новый заказ*\n\nКлиент: *{client}*\nГруппа: {group}\nДата: {date}\n\n{items}\n\n*Итого: {total} шт*',
     order_updated_manager: '✏️ *Заказ обновлён*\n\nКлиент: *{client}*\nГруппа: {group}\nДата: {date}\n\n{items}\n\n*Итого: {total} шт*',
+    order_cancelled_manager: '❌ *Заказ отменён*\n\nКлиент: *{client}*\nГруппа: {group}\nДата: {date}',
 
     reminder_text: '⏰ *Напоминание о заказе Mini Melts* 🍦\n\nПришло время сделать заказ.\nСрок подачи: *{deadline}*\n\nНажмите на кнопку для открытия панели:',
     reminder_btn: '📋 Сделать заказ',

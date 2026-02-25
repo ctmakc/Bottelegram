@@ -244,34 +244,49 @@
 
     // ── Order status / deadline ────────────────────────────────────────────────
     const order = state.currentOrder;
-    const isExpired = order?.deadline ? new Date(order.deadline) < new Date() : false;
-    const canEdit = order ? (!isExpired && order.status !== 'confirmed') : true;
+    const now = new Date();
+    const isExpired = order?.deadline ? new Date(order.deadline) < now : false;
+    const canEdit = order ? (!isExpired && order.status !== 'confirmed' && order.status !== 'cancelled') : true;
+    const canCancel = order
+      && order.status === 'submitted'
+      && order.cancel_deadline
+      && new Date(order.cancel_deadline) > now;
 
     if (order) {
       // Show status badge
       const statusKey = 'order_status_' + order.status;
       wrap.append(h('div', { class: 'order-status-badge' }, t(statusKey)));
 
-      // Deadline
-      if (order.deadline) {
+      // Edit deadline
+      if (order.deadline && order.status !== 'cancelled') {
         const cls = 'deadline-banner' + (isExpired ? ' expired' : '');
         wrap.append(h('div', { class: cls },
           t('deadline_label'), ' ',
           h('strong', {}, fmt(order.deadline)),
         ));
       }
+
+      // Cancel deadline (only when still cancellable or just expired)
+      if (order.cancel_deadline && order.status === 'submitted') {
+        const cancelExpired = new Date(order.cancel_deadline) <= now;
+        if (!cancelExpired) {
+          wrap.append(h('div', { class: 'deadline-banner' },
+            t('cancel_deadline_label'), ' ',
+            h('strong', {}, fmt(order.cancel_deadline)),
+          ));
+        }
+      }
     }
 
     // ── Products / order form ─────────────────────────────────────────────────
-    const isReadOnly = order && !state.editMode && !canEdit;
-    const isViewOnly = order && !state.editMode && order.status === 'confirmed';
+    const isReadOnly = order && !state.editMode && (!canEdit || order.status === 'cancelled');
 
     if (!isReadOnly || state.editMode) {
       // Editable form
       renderOrderForm(wrap, order, canEdit);
     } else {
       // Read-only summary
-      renderOrderSummary(wrap, order);
+      renderOrderSummary(wrap, order, canCancel);
     }
 
     main.append(wrap);
@@ -331,7 +346,7 @@
     }
   }
 
-  function renderOrderSummary(container, order) {
+  function renderOrderSummary(container, order, canCancel = false) {
     const items = order.items.filter(i => i.quantity > 0);
     const ul = h('ul', { class: 'order-items-list' });
     let total = 0;
@@ -354,18 +369,26 @@
       )),
     );
 
-    if (canStillEdit && order.status !== 'confirmed') {
-      container.append(h('div', { class: 'submit-area' },
-        h('button', {
-          class: 'btn-secondary',
-          onclick: () => { state.editMode = true; renderClientView(); },
-        }, t('btn_edit')),
-      ));
-    } else if (order.status !== 'confirmed') {
-      container.append(h('div', { class: 'submit-area' },
-        h('p', { class: 'deadline-banner expired' }, t('past_deadline')),
-      ));
+    const btnArea = h('div', { class: 'submit-area' });
+
+    if (canStillEdit && order.status !== 'confirmed' && order.status !== 'cancelled') {
+      btnArea.append(h('button', {
+        class: 'btn-secondary',
+        onclick: () => { state.editMode = true; renderClientView(); },
+      }, t('btn_edit')));
+    } else if (order.status !== 'confirmed' && order.status !== 'cancelled') {
+      btnArea.append(h('p', { class: 'deadline-banner expired' }, t('past_deadline')));
     }
+
+    if (canCancel) {
+      btnArea.append(h('button', {
+        class: 'btn-small btn-danger',
+        style: { marginTop: '10px', width: '100%', padding: '13px', borderRadius: '12px', fontSize: '15px' },
+        onclick: () => handleCancelOrder(),
+      }, t('btn_cancel_order')));
+    }
+
+    if (btnArea.children.length) container.append(btnArea);
   }
 
   async function handleSubmitOrder(container) {
@@ -393,6 +416,22 @@
     } catch (e) {
       showToast(t('error_loading'));
       if (btn) { btn.disabled = false; btn.textContent = t('btn_submit'); }
+    }
+  }
+
+  async function handleCancelOrder() {
+    if (!confirm(t('cancel_confirm'))) return;
+    try {
+      await window.api.cancelOrder();
+      // Refresh order from server
+      const res = await window.api.getCurrentOrder();
+      state.currentOrder = res.order;
+      state.editMode = false;
+      showToast(t('order_cancelled_msg'));
+      if (twa) twa.HapticFeedback?.notificationOccurred('warning');
+      renderClientView();
+    } catch (e) {
+      showToast(t('error_loading'));
     }
   }
 
@@ -459,7 +498,7 @@
 
     // Filter pills
     const filterBar = h('div', { class: 'filter-bar' });
-    [['all', 'filter_all'], ['submitted', 'filter_submitted'], ['confirmed', 'filter_confirmed']].forEach(([f, k]) => {
+    [['all', 'filter_all'], ['submitted', 'filter_submitted'], ['confirmed', 'filter_confirmed'], ['cancelled', 'filter_cancelled']].forEach(([f, k]) => {
       filterBar.append(h('button', {
         class: 'filter-pill' + (state.adminFilter === f ? ' active' : ''),
         onclick: () => { state.adminFilter = f; renderAdminView(); },
@@ -490,7 +529,7 @@
     const items = order.items.filter(i => i.quantity > 0);
     const total = items.reduce((s, i) => s + i.quantity, 0);
 
-    const statusCls = { submitted: 'badge-submitted', confirmed: 'badge-confirmed', draft: 'badge-draft' };
+    const statusCls = { submitted: 'badge-submitted', confirmed: 'badge-confirmed', cancelled: 'badge-rejected', draft: 'badge-draft' };
     const statusLabel = t('order_status_' + order.status);
 
     const ul = h('ul', { class: 'order-items-list' });
