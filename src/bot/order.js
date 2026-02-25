@@ -163,8 +163,20 @@ function buildSummaryKeyboard(lang, order) {
  */
 async function handleStartOrder(ctx) {
   const user = db.findUserByTelegramId(ctx.from.id);
-  if (!user || (!user.is_approved && !user.is_admin)) {
-    return ctx.answerCbQuery?.();
+
+  if (!user) {
+    const msg = 'No estás registrado. Envía /start para comenzar.';
+    if (ctx.callbackQuery) return ctx.answerCbQuery(msg, { show_alert: true });
+    return ctx.reply(msg);
+  }
+
+  if (!user.is_approved && !user.is_admin) {
+    const lang = user.language || 'es';
+    const msg = user.is_pending
+      ? (lang === 'ru' ? '⏳ Ваш запрос на рассмотрении.' : '⏳ Tu acceso está pendiente de aprobación.')
+      : (lang === 'ru' ? '❌ Ваш запрос не был одобрён.' : '❌ Tu acceso no fue aprobado.');
+    if (ctx.callbackQuery) return ctx.answerCbQuery(msg, { show_alert: true });
+    return ctx.reply(msg);
   }
 
   const products = db.getActiveProducts();
@@ -307,7 +319,9 @@ async function handleEditOrder(ctx) {
   const period = db.getTodayPeriod();
   const order  = db.getOrderForUser(user.id, period);
 
-  if (!order) return ctx.answerCbQuery();
+  if (!order || order.status !== 'submitted') {
+    return ctx.answerCbQuery(lang === 'ru' ? 'Заказ больше не редактируется' : 'El pedido ya no es editable', { show_alert: true });
+  }
   if (order.deadline && new Date(order.deadline) < new Date()) {
     return ctx.answerCbQuery(lang === 'ru' ? 'Срок редактирования истёк' : 'Plazo de edición superado', { show_alert: true });
   }

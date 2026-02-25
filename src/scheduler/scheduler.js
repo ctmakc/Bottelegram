@@ -55,35 +55,57 @@ async function sendGroupReminder(group) {
 }
 
 /**
+ * Deduplication set: tracks 'groupId_YYYY-MM-DD_HH:MM' keys so reminders are
+ * never sent twice even if the bot restarts within the same minute.
+ */
+const sentReminders = new Set();
+
+/**
  * Check every minute if any group has a scheduled reminder at the current time.
  * reminder_time is stored as "HH:MM" (24h, Europe/Madrid timezone).
  * reminder_days is stored as JSON array of ISO weekdays [1–7] (1=Monday).
  */
 function startScheduler() {
   cron.schedule('* * * * *', async () => {
-    const now = new Date();
-    const madridTime = new Date(now.toLocaleString('en-US', { timeZone: 'Europe/Madrid' }));
-    const hh = String(madridTime.getHours()).padStart(2, '0');
-    const mm = String(madridTime.getMinutes()).padStart(2, '0');
-    const currentTime = `${hh}:${mm}`;
-    // ISO day: 1=Mon … 7=Sun
-    const currentDay = madridTime.getDay() === 0 ? 7 : madridTime.getDay();
+    try {
+      const now = new Date();
+      const madridTime = new Date(now.toLocaleString('en-US', { timeZone: 'Europe/Madrid' }));
+      const hh = String(madridTime.getHours()).padStart(2, '0');
+      const mm = String(madridTime.getMinutes()).padStart(2, '0');
+      const currentTime = `${hh}:${mm}`;
+      // ISO day: 1=Mon … 7=Sun
+      const currentDay = madridTime.getDay() === 0 ? 7 : madridTime.getDay();
+      const dateKey = madridTime.toISOString().slice(0, 10); // YYYY-MM-DD
 
-    const groups = db.getAllGroups();
-    for (const group of groups) {
-      if (group.reminder_time !== currentTime) continue;
+      const groups = db.getAllGroups();
+      for (const group of groups) {
+        if (group.reminder_time !== currentTime) continue;
 
-      let days;
-      try {
-        days = JSON.parse(group.reminder_days || '[1,2,3,4,5]');
-      } catch {
-        days = [1, 2, 3, 4, 5];
+        let days;
+        try {
+          days = JSON.parse(group.reminder_days || '[1,2,3,4,5]');
+        } catch {
+          days = [1, 2, 3, 4, 5];
+        }
+
+        if (!days.includes(currentDay)) continue;
+
+        // Skip if already sent this reminder today (deduplication)
+        const dedupeKey = `${group.id}_${dateKey}_${currentTime}`;
+        if (sentReminders.has(dedupeKey)) continue;
+        sentReminders.add(dedupeKey);
+
+        await sendGroupReminder(group);
       }
-
-      if (!days.includes(currentDay)) continue;
-
-      await sendGroupReminder(group);
+    } catch (err) {
+      console.error('[scheduler] Error in cron job:', err.message);
     }
+  });
+
+  // Clear deduplication set at midnight
+  cron.schedule('0 0 * * *', () => {
+    sentReminders.clear();
+    console.log('[scheduler] Deduplication set cleared for new day.');
   });
 
   console.log('[scheduler] Started — checking every minute for scheduled reminders.');

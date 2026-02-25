@@ -33,7 +33,14 @@ async function handleStart(ctx) {
     const lang = existingUser.language || 'es';
     if (existingUser.is_approved) {
       const keyboard = existingUser.is_admin ? buildAdminKeyboard(lang) : buildOrderKeyboard(lang);
-      return ctx.reply(t(lang, 'already_approved'), keyboard);
+      await ctx.reply(t(lang, 'already_approved'), keyboard);
+      if (existingUser.is_admin) {
+        const hint = lang === 'ru'
+          ? '⚙️ *Команды:* /orders · /clients · /products · /groups'
+          : '⚙️ *Comandos:* /orders · /clients · /products · /groups';
+        await ctx.reply(hint, { parse_mode: 'Markdown' });
+      }
+      return;
     } else if (existingUser.is_pending) {
       return ctx.reply(t(lang, 'already_pending'));
     } else {
@@ -93,8 +100,11 @@ async function handleLanguageSelection(ctx, lang, telegramId) {
 
   // If admin — auto-approve, no need to notify manager
   if (user.is_admin) {
-    const keyboard = buildAdminKeyboard(lang);
-    await safeSend(telegramId, t(lang, 'welcome_approved'), keyboard);
+    await safeSend(telegramId, t(lang, 'welcome_approved'), buildAdminKeyboard(lang));
+    const hint = lang === 'ru'
+      ? '⚙️ *Команды администратора:*\n/orders — заказы дня\n/clients — клиенты\n/products — продукты\n/groups — группы доставки'
+      : '⚙️ *Comandos de administración:*\n/orders — pedidos del día\n/clients — clientes\n/products — productos\n/groups — grupos de entrega';
+    await safeSend(telegramId, hint);
     return ctx.answerCbQuery();
   }
 
